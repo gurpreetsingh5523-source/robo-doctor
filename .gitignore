@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Local data & databases (patient privacy — never commit)
+data/
+*.db
+*.sqlite
+
+# Secrets
+.env
+*.key
+
+# OS
+.DS_Store
+
+# Logs
+*.log

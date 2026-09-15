@@ -1,0 +1,11 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+requests>=2.31.0
+pyyaml>=6.0
+numpy>=1.24.0
+scipy>=1.11.0
+networkx>=3.0
+pydantic>=2.0.0
+websockets>=11.0
+# Optional: python-telegram-bot>=20.0
+# Optional: discord.py>=2.0
