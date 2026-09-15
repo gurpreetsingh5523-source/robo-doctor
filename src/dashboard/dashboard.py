@@ -4,13 +4,17 @@ AMRIT Dashboard - FastAPI Web Server
 Terminal live logs + Web interface
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uvicorn
 import asyncio
+import os
 from datetime import datetime
 import json
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 
 # Import real AMRIT modules (wired in v6.2 — no more simulated responses)
 try:
@@ -139,14 +143,33 @@ class PrescriptionReviewRequest(BaseModel):
 
 # ==================== ROOT ENDPOINT ====================
 
+# PWA static assets (manifest, icons)
+if os.path.isdir(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.get("/sw.js")
+async def service_worker():
+    """Service worker must be served from root scope for full PWA control."""
+    return FileResponse(os.path.join(STATIC_DIR, 'sw.js'),
+                        media_type='application/javascript')
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """AMRIT Dashboard Home"""
+    """Robo Doctor Home (installable PWA)"""
     page = """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>AMRIT Research OS v6.0</title>
+        <title>Robo Doctor</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#0d7a5f">
+        <link rel="manifest" href="/static/manifest.webmanifest">
+        <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+        <script>
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            }
+        </script>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; }
@@ -166,8 +189,8 @@ async def root():
     </head>
     <body>
         <div class="header">
-            <h1>🕉️ AMRIT Research OS v6.0</h1>
-            <h2>Autonomous Medical Research & Personalized Health System</h2>
+            <h1>🕉️ Robo Doctor</h1>
+            <h2>Seva Healthcare Assistant — patient memory, research, diagnosis support</h2>
             <p class="gurmat">"ਸਰਬੱਤ ਦਾ ਭਲਾ" (Sarbat Da Bhala) - Welfare of All Humanity</p>
         </div>
 
