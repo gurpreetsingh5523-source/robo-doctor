@@ -570,6 +570,63 @@ class TestLLMAndVoice(unittest.TestCase):
         self.assertEqual(r['status'], 'stt_not_configured')
         self.assertIsNone(r['text'])  # never fabricated
 
+class TestChatEngine(unittest.TestCase):
+    """Test chat command interface (v6.2)"""
+
+    def _make(self):
+        import tempfile
+        from src.patients.patient_registry import PatientRegistry
+        from src.medical.symptom_analyzer import SymptomAnalyzer
+        from src.medical.blood_analyzer import BloodAnalyzer
+        from src.medical.prescription_workflow import PrescriptionWorkflow
+        from src.dashboard.chat_engine import ChatEngine
+        tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        reg = PatientRegistry(db_path=tmp.name)
+        engine = ChatEngine(
+            patient_registry=reg,
+            symptom_analyzer=SymptomAnalyzer(),
+            blood_analyzer=BloodAnalyzer(),
+            prescription_workflow=PrescriptionWorkflow(patient_registry=reg),
+            llm=None)  # offline rules only
+        return engine, tmp.name
+
+    def test_help_and_unknown(self):
+        eng, tmp = self._make()
+        self.assertIn('register patient', eng.handle('help')['reply'])
+        r = eng.handle('blargh flibberty gibbet')
+        self.assertFalse(r['understood'])  # honest, no guessing
+        os.unlink(tmp)
+
+    def test_full_flow_via_chat(self):
+        eng, tmp = self._make()
+        r = eng.handle('register patient age 52 male population south_asian')
+        pid = r['data']['patient_id']
+        self.assertTrue(pid.startswith('AMRIT-'))
+        r = eng.handle(f'symptoms: excessive thirst, frequent urination for {pid}')
+        self.assertIn('hba1c', r['reply'])
+        r = eng.handle(f'blood: glucose_fasting=180 for {pid}')
+        self.assertIn('critical', r['reply'])
+        r = eng.handle(f'draft prescription for {pid} condition type_2_diabetes doctor DR_SMITH')
+        rx_id = r['data']['prescription_id']
+        self.assertIn('DRAFT', r['reply'])
+        r = eng.handle(f'approve {rx_id} doctor DR_WRONG')
+        self.assertTrue(r['error'])  # wrong doctor blocked via chat too
+        r = eng.handle(f'approve {rx_id} doctor DR_SMITH')
+        self.assertIn('approved', r['reply'])
+        r = eng.handle(f'history of {pid}')
+        self.assertIn('blood_panel', r['reply'])
+        os.unlink(tmp)
+
+    def test_chat_cannot_self_approve(self):
+        eng, tmp = self._make()
+        r = eng.handle('register patient age 40 female')
+        pid = r['data']['patient_id']
+        r = eng.handle(f'draft prescription for {pid} condition hypertension doctor DR_A')
+        rx_id = r['data']['prescription_id']
+        r = eng.handle(f'approve {rx_id}')  # no doctor given, no session
+        self.assertFalse(r['understood'])  # must name the doctor
+        os.unlink(tmp)
+
 if __name__ == '__main__':
     # Run all tests with verbose output
     unittest.main(verbosity=2)

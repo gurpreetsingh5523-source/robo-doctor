@@ -40,6 +40,7 @@ try:
         PrescriptionWorkflow, PrescriptionStateError, DoctorVerificationRequired)
     from src.core.llm_interface import LLMInterface
     from src.dashboard.voice_interface import VoiceInterface
+    from src.dashboard.chat_engine import ChatEngine
     MODULES_AVAILABLE = True
     MODULE_IMPORT_ERROR = None
 except Exception as e:
@@ -80,12 +81,21 @@ if MODULES_AVAILABLE:
     prescription_workflow = PrescriptionWorkflow(patient_registry=patient_registry)
     llm = LLMInterface()
     voice = VoiceInterface()
+    chat_engine = ChatEngine(
+        patient_registry=patient_registry,
+        symptom_analyzer=symptom_analyzer,
+        blood_analyzer=blood_analyzer,
+        prescription_workflow=prescription_workflow,
+        llm=llm,
+        health_advisor=health_advisor)
+    chat_sessions: Dict[str, Dict] = {}
 else:
     memory_manager = ethics_filter = blood_analyzer = None
     alphagenome_client = health_advisor = research_brain = None
     statistical_engine = agent_manager = unified_agent = None
     patient_registry = symptom_analyzer = prescription_workflow = None
-    llm = voice = None
+    llm = voice = chat_engine = None
+    chat_sessions = {}
 
 # Request/Response models
 class ResearchRequest(BaseModel):
@@ -141,6 +151,10 @@ class PrescriptionReviewRequest(BaseModel):
     reason: Optional[str] = ""
     medications: Optional[List[Dict]] = None   # for modify_and_approve
 
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = "default"
+
 # ==================== ROOT ENDPOINT ====================
 
 # PWA static assets (manifest, icons)
@@ -155,107 +169,133 @@ async def service_worker():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Robo Doctor Home (installable PWA)"""
-    page = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Robo Doctor</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#0d7a5f">
-        <link rel="manifest" href="/static/manifest.webmanifest">
-        <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-        <script>
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
-            }
-        </script>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; }
-            .card { background: white; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .metric { display: inline-block; margin: 10px 20px; text-align: center; }
-            .metric-value { font-size: 32px; font-weight: bold; color: #667eea; }
-            .metric-label { font-size: 14px; color: #666; }
-            .status { padding: 5px 15px; border-radius: 20px; display: inline-block; }
-            .status-operational { background: #d4edda; color: #155724; }
-            .status-initializing { background: #fff3cd; color: #856404; }
-            .gurmat { font-style: italic; color: #764ba2; margin-top: 20px; }
-            .modules { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
-            .module-tag { background: #e3f2fd; color: #1565c0; padding: 5px 12px; border-radius: 15px; font-size: 12px; }
-            a { color: #667eea; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>🕉️ Robo Doctor</h1>
-            <h2>Seva Healthcare Assistant — patient memory, research, diagnosis support</h2>
-            <p class="gurmat">"ਸਰਬੱਤ ਦਾ ਭਲਾ" (Sarbat Da Bhala) - Welfare of All Humanity</p>
-        </div>
-
-        <div class="card">
-            <h3>System Status</h3>
-            <span class="status status-{status}">{status_text}</span>
-            <p>Last Update: {last_update}</p>
-        </div>
-
-        <div class="card">
-            <h3>Metrics</h3>
-            <div class="metric">
-                <div class="metric-value">{modules_count}</div>
-                <div class="metric-label">Modules Loaded</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">{requests}</div>
-                <div class="metric-label">Total Requests</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">{active_research}</div>
-                <div class="metric-label">Active Research</div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>Available Modules</h3>
-            <div class="modules">
-                {module_tags}
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>API Endpoints</h3>
-            <ul>
-                <li><a href="/api/status">GET /api/status</a> - System status</li>
-                <li><a href="/api/research">POST /api/research</a> - Start autonomous research</li>
-                <li><a href="/api/blood/analyze">POST /api/blood/analyze</a> - Analyze blood panel</li>
-                <li><a href="/api/dna/analyze">POST /api/dna/analyze</a> - Analyze DNA variants</li>
-                <li><a href="/api/ethics/check">POST /api/ethics/check</a> - Ethics assessment</li>
-                <li><a href="/api/health/assessment">POST /api/health/assessment</a> - Full health assessment</li>
-                <li><a href="/api/modules/generate">POST /api/modules/generate</a> - Auto-generate module</li>
-                <li><a href="/docs">/docs</a> - API Documentation</li>
-            </ul>
-        </div>
-
-        <div class="card">
-            <h3>About</h3>
-            <p><strong>Founder:</strong> Gurpreet Singh</p>
-            <p><strong>Mission:</strong> Lifelong Seva (Selfless Service) through technology</p>
-            <p><strong>License:</strong> Public Domain - For the welfare of all humanity</p>
-            <p class="gurmat">"ਨਾਨਕ ਨਾਮ ਚੜ੍ਹਦੀ ਕਲਾ, ਤੇਰੇ ਭਾਣੇ ਸਰਬੱਤ ਦਾ ਭਲਾ"</p>
-        </div>
-    </body>
-    </html>
-    """
-    page = (page
-        .replace('{status_text}', system_state['status'].upper())
-        .replace('{status}', 'operational' if system_state['status'] == 'operational' else 'initializing')
-        .replace('{last_update}', system_state['last_update'])
-        .replace('{modules_count}', str(len(system_state['modules_loaded'])))
-        .replace('{requests}', str(system_state['total_requests']))
-        .replace('{active_research}', str(len(system_state['active_research'])))
-        .replace('{module_tags}', ''.join([f'<span class="module-tag">{m}</span>' for m in system_state['modules_loaded']]) if system_state['modules_loaded'] else '<span class="module-tag">System Initializing...</span>')
-    )
+    """Robo Doctor Clinic UI — chat-first, works offline (installable PWA)"""
+    page = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Robo Doctor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0d7a5f">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; margin: 0;
+               background: #0d1117; color: #e6edf3; }
+        header { background: linear-gradient(135deg, #0d7a5f, #0a5c48); color: white;
+                 padding: 14px 22px; display: flex; align-items: center; gap: 14px;
+                 position: sticky; top: 0; }
+        header img { width: 44px; height: 44px; border-radius: 10px; }
+        header h1 { font-size: 20px; margin: 0; }
+        header .tag { font-size: 12px; opacity: .85; margin: 2px 0 0; }
+        .pill { margin-left: auto; background: #1f6f43; padding: 4px 12px;
+                border-radius: 20px; font-size: 12px; }
+        .pill.warn { background: #9e6a03; }
+        main { max-width: 860px; margin: 0 auto; padding: 18px; }
+        #chat { background: #161b22; border: 1px solid #30363d; border-radius: 14px;
+                padding: 16px; height: 52vh; overflow-y: auto; }
+        .msg { margin: 10px 0; padding: 10px 14px; border-radius: 12px;
+               max-width: 85%; white-space: pre-wrap; line-height: 1.45; font-size: 15px; }
+        .user { background: #1f6feb; margin-left: auto; }
+        .robo { background: #21262d; border: 1px solid #30363d; }
+        .robo.err { border-color: #cf222e; }
+        .quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+        .quick button { background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+                padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; }
+        .quick button:hover { border-color: #0d7a5f; }
+        #inputrow { display: flex; gap: 10px; margin-top: 6px; }
+        #msg { flex: 1; background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+               padding: 13px 16px; border-radius: 24px; font-size: 15px; }
+        #msg:focus { outline: none; border-color: #0d7a5f; }
+        #send { background: #0d7a5f; color: white; border: none; padding: 0 24px;
+                border-radius: 24px; font-size: 15px; cursor: pointer; }
+        #send:hover { background: #0f9669; }
+        .meta { text-align: center; color: #8b949e; font-size: 12px; margin-top: 16px;
+                line-height: 1.7; }
+        .rule { color: #f85149; font-size: 12px; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<header>
+    <img src="/static/icons/icon-192.png" alt="Robo Doctor">
+    <div>
+        <h1>Robo Doctor</h1>
+        <p class="tag">Seva Healthcare Assistant · ਸਰਬੱਤ ਦਾ ਭਲਾ</p>
+    </div>
+    <span class="pill" id="statuspill">…</span>
+</header>
+<main>
+    <div id="chat">
+        <div class="msg robo">Sat Sri Akal ji. I am Robo Doctor — your clinic assistant.
+Type <b>help</b> to see what I understand, or tap a quick action below.
+I remember every patient, and a licensed doctor approves every prescription.</div>
+    </div>
+    <div class="quick">
+        <button onclick="quick('help')">❓ Help</button>
+        <button onclick="quick('register patient age ')">🧍 Register patient</button>
+        <button onclick="quick('symptoms: ')">🩺 Symptoms → tests</button>
+        <button onclick="quick('blood: ')">🩸 Blood results</button>
+        <button onclick="quick('pending prescriptions for ')">📋 Pending Rx</button>
+        <button onclick="quick('status')">⚙️ Status</button>
+    </div>
+    <div id="inputrow">
+        <input id="msg" placeholder="Type here… e.g. symptoms: fatigue, excessive thirst"
+               onkeydown="if(event.key==='Enter')send()">
+        <button id="send" onclick="send()">Send</button>
+    </div>
+    <p class="rule">HARD RULE: no prescription is final without a licensed doctor's approval.</p>
+    <p class="meta" id="meta"></p>
+</main>
+<script>
+const chat = document.getElementById('chat');
+const box = document.getElementById('msg');
+function add(text, cls) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.textContent = text;
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+}
+function quick(t) { box.value = t; box.focus(); if (t === 'help' || t === 'status') send(); }
+async function send() {
+    const text = box.value.trim();
+    if (!text) return;
+    add(text, 'user');
+    box.value = '';
+    add('…', 'robo');
+    const thinking = chat.lastChild;
+    try {
+        const r = await fetch('/api/chat', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text, session_id: 'clinic-ui'})
+        });
+        const d = await r.json();
+        thinking.textContent = d.reply || ('Error: ' + (d.detail || r.status));
+        if (d.error) thinking.classList.add('err');
+    } catch (e) {
+        thinking.textContent = 'Cannot reach server. Is Robo Doctor running?';
+        thinking.classList.add('err');
+    }
+}
+fetch('/api/status').then(r => r.json()).then(d => {
+    const p = document.getElementById('statuspill');
+    p.textContent = d.status === 'operational' ? '● operational' : '● ' + d.status;
+    if (d.status !== 'operational') p.classList.add('warn');
+    document.getElementById('meta').textContent =
+        d.modules.length + ' real modules · offline-first · patient data stays on this machine';
+}).catch(() => {});
+fetch('/api/llm/status').then(r => r.json()).then(d => {
+    document.getElementById('meta').textContent +=
+        ' · LLM: ' + (d.configured ? d.model : 'offline rules (plug any API/Ollama)');
+}).catch(() => {});
+</script>
+</body>
+</html>"""
     return page
 
 # ==================== API ENDPOINTS ====================
@@ -568,6 +608,25 @@ async def voice_status():
     if voice is None:
         raise HTTPException(status_code=503, detail="VoiceInterface unavailable")
     return voice.capabilities()
+
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    """
+    Chat with Robo Doctor — type commands in plain English.
+    Works offline with rule parser; understands free text when an LLM
+    (Ollama local or any OpenAI-compatible API) is configured.
+    Same safety gates as the API: consent, ethics, doctor approval.
+    """
+    system_state['total_requests'] += 1
+    if chat_engine is None:
+        raise HTTPException(status_code=503, detail="ChatEngine unavailable")
+    session = chat_sessions.setdefault(request.session_id, {})
+    result = chat_engine.handle(request.message, session)
+    # keep lightweight context for follow-up messages
+    if result.get('data', {}) and result['data'].get('patient_id'):
+        session['patient_id'] = result['data']['patient_id']
+    return result
 
 @app.get("/api/research/active")
 async def get_active_research():
