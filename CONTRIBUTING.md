@@ -35,7 +35,7 @@ python -m src.dashboard.dashboard      # http://localhost:8000
 | `src/medical/alphagenome_client.py` | Wire the real AlphaGenome Atlas API |
 | `src/medical/docking_gateway.py` | RDKit/Meeko ligand preparation pipeline |
 | `src/core/data_collector.py` | More literature sources, better dedup |
-| Voice | Punjabi/Hindi STT integration (Qwen/Whisper) |
+| Voice | English STT integration (Whisper/faster-whisper) |
 | Dashboard UI | Friendly web front-end for clinics |
 
 ## Pull request process

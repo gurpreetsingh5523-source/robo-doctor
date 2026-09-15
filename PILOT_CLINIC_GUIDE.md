@@ -5,6 +5,8 @@ path to credibility with government health institutions.
 
 ## Before the pilot
 
+0. **Print and bring [docs/clinic_intro_letter.md](docs/clinic_intro_letter.md)**
+   — a one-page invitation letter for the doctor.
 1. **Get a licensed doctor as champion.** Robo Doctor never replaces them;
    the pilot measures how much *time it saves them*.
 2. **Ethics & consent.** Print consent forms (general + genomic) in the
