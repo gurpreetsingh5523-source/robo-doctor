@@ -99,24 +99,23 @@ the poor and underserved who lack access to quality healthcare.
 
 ## 🚀 Quick Start
 
-### Installation
-```bash
-# Clone repository
-git clone https://github.com/gurpreet/amrit-research-os.git
-cd amrit-research-os
+### For clinics (one click, no terminal)
+1. Clone or download this repo
+2. **macOS/Linux:** double-click `RoboDoctor.command`
+   **Windows:** double-click `RoboDoctor.bat`
+3. First run installs dependencies automatically (needs internet once);
+   after that it works **fully offline**
+4. Robo Doctor opens at http://localhost:8000 — then click **Install** in the
+   browser address bar to add it as an app with the logo
 
-# Install dependencies
+### For developers
+```bash
+git clone https://github.com/gurpreetsingh5523-source/robo-doctor.git
+cd robo-doctor
 pip install -r requirements.txt
-
-# Or install as package
-pip install -e .
+python -m unittest discover -s tests   # 52 tests must pass
+python -m src.dashboard.dashboard      # http://localhost:8000
 ```
-
-### Start Dashboard
-```bash
-python src/dashboard/dashboard.py
-```
-Access dashboard at: http://localhost:8000
 
 ### API Usage Examples
 
