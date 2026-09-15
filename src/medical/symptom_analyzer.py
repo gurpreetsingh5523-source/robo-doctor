@@ -120,15 +120,15 @@ SYMPTOM_MAP = {
     },
 }
 
-# Red-flag combinations -> immediate escalation
+# Red-flag combinations -> escalation (combo, message, level)
 RED_FLAG_COMBOS = [
-    ({"chest_pain", "breathlessness"}, "Possible cardiac event — EMERGENCY"),
-    ({"chest_pain", "sweating"}, "Possible heart attack — call emergency services"),
-    ({"fever", "stiff_neck"}, "Possible meningitis — EMERGENCY"),
-    ({"severe_headache", "blurred_vision"}, "Possible stroke/pressure crisis — EMERGENCY"),
-    ({"weight_loss", "night_sweats", "persistent_cough"}, "TB/malignancy screen — URGENT"),
-    ({"excessive_thirst", "frequent_urination", "weight_loss"}, "Likely diabetes — test this week"),
-    ({"fatigue", "pale_skin", "breathlessness"}, "Significant anemia likely — test this week"),
+    ({"chest_pain", "breathlessness"}, "Possible cardiac event — EMERGENCY", "EMERGENCY"),
+    ({"chest_pain", "sweating"}, "Possible heart attack — call emergency services", "EMERGENCY"),
+    ({"fever", "stiff_neck"}, "Possible meningitis — EMERGENCY", "EMERGENCY"),
+    ({"severe_headache", "blurred_vision"}, "Possible stroke/pressure crisis — EMERGENCY", "EMERGENCY"),
+    ({"weight_loss", "night_sweats", "persistent_cough"}, "TB/malignancy screen — URGENT", "urgent"),
+    ({"excessive_thirst", "frequent_urination", "weight_loss"}, "Likely diabetes — test this week", "priority"),
+    ({"fatigue", "pale_skin", "breathlessness"}, "Significant anemia likely — test this week", "priority"),
 ]
 
 # Population-specific extra screening
@@ -163,10 +163,11 @@ class SymptomAnalyzer:
         # Red-flag combination check
         red_flags = []
         symptom_set = set(normalized)
-        for combo, message in RED_FLAG_COMBOS:
+        for combo, message, level in RED_FLAG_COMBOS:
             if combo.issubset(symptom_set):
                 red_flags.append(message)
-                max_urgency = "EMERGENCY"
+                if urgency_rank[level] > urgency_rank[max_urgency]:
+                    max_urgency = level
 
         # Population extras
         extras = POPULATION_EXTRA.get(population.lower().replace(" ", "_"), {})

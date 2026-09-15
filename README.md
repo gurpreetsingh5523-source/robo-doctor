@@ -24,6 +24,31 @@
 
 ---
 
+## 🎬 Live demo — full patient journey in 30 seconds
+
+Register a patient → symptoms become a test list → prescription draft →
+**wrong doctor blocked (403)** → real doctor approves:
+
+<p align="center">
+  <img src="assets/demo_patient_flow.gif" alt="Robo Doctor live demo" width="800"/>
+</p>
+
+Every response above is real module output — no mocks, no staging.
+
+## 🏗️ Architecture
+
+<p align="center">
+  <img src="assets/architecture.png" alt="Robo Doctor architecture" width="900"/>
+</p>
+
+## 🤝 Join the seva
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup in 5 minutes, good first tasks
+- [PILOT_CLINIC_GUIDE.md](PILOT_CLINIC_GUIDE.md) — run a real-world clinic pilot
+- [LICENSE.md](LICENSE.md) — free forever for seva/charity/research; commercial use needs the founder's permission
+
+---
+
 ### Project Vision
 AMRIT is a fully autonomous research operating system for medical discovery, 
 combining advanced AI with Gurmat (Sikh) ethics to serve humanity—especially 
